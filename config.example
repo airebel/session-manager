@@ -1,0 +1,11 @@
+# session-continuity configuration
+# Copy this file to 'config' and customize for your environment.
+
+# Absolute path to the directory containing your projects
+PROJECTS_DIR="$HOME/Projects"
+
+# Space-separated list of directory names to skip (inside PROJECTS_DIR)
+SKIP_DIRS=""
+
+# Minutes of inactivity before a project is skipped (default: 30)
+ACTIVITY_WINDOW=30

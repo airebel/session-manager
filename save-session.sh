@@ -3,21 +3,37 @@
 # Usage: ./save-session.sh [project-name]
 # Creates/updates SESSION_STATE.md in the project directory
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Load config
+CONFIG_FILE="${SESSION_CONTINUITY_CONFIG:-$SCRIPT_DIR/config}"
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo "ERROR: Config file not found: $CONFIG_FILE"
+    echo "Run ./install.sh or copy config.example to config and edit it."
+    exit 1
+fi
+source "$CONFIG_FILE"
+
 PROJECT=${1:-$(basename "$(pwd)")}
-PROJECT_DIR="/Users/openclaw/Projects/$PROJECT"
+PROJECT_DIR="$PROJECTS_DIR/$PROJECT"
 STATE_FILE="$PROJECT_DIR/SESSION_STATE.md"
 
 if [ ! -d "$PROJECT_DIR" ]; then
     echo "Project directory not found: $PROJECT_DIR"
     echo "Usage: ./save-session.sh [project-name]"
     echo "Available projects:"
-    ls -d /Users/openclaw/Projects/*/  | xargs -I{} basename {}
+    ls -d "$PROJECTS_DIR"/*/ | xargs -I{} basename {}
     exit 1
 fi
 
 # Copy template if no state file exists
+TEMPLATE_FILE="$SCRIPT_DIR/templates/SESSION_STATE.md"
 if [ ! -f "$STATE_FILE" ]; then
-    cp /Users/openclaw/Projects/SESSION_STATE.md "$STATE_FILE"
+    if [ ! -f "$TEMPLATE_FILE" ]; then
+        echo "ERROR: Template not found: $TEMPLATE_FILE"
+        exit 1
+    fi
+    cp "$TEMPLATE_FILE" "$STATE_FILE"
     echo "Created new SESSION_STATE.md in $PROJECT_DIR"
 fi
 

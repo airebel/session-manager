@@ -2,9 +2,21 @@
 # auto-save-sessions.sh — Cron job that auto-updates SESSION_STATE.md for active projects
 # Runs every 10 minutes. Only updates projects with recent git activity (last 30 min).
 
-PROJECTS_DIR="/Users/openclaw/Projects"
-SKIP_DIRS="ai-task-manager_RETIRED scratch"
-ACTIVITY_WINDOW=30  # minutes — only update projects with recent file changes
+# Resolve script's own directory (works with symlinks and cron)
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Load config
+CONFIG_FILE="${SESSION_CONTINUITY_CONFIG:-$SCRIPT_DIR/config}"
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo "ERROR: Config file not found: $CONFIG_FILE"
+    echo "Run ./install.sh or copy config.example to config and edit it."
+    exit 1
+fi
+source "$CONFIG_FILE"
+
+# Defaults for optional values
+ACTIVITY_WINDOW="${ACTIVITY_WINDOW:-30}"
+SKIP_DIRS="${SKIP_DIRS:-}"
 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
