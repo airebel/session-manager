@@ -24,7 +24,7 @@ A lightweight cron job snapshots your git project state every 10 minutes into a 
 ## Quick Start
 
 ```bash
-git clone https://github.com/yourusername/session-continuity.git
+git clone https://github.com/airebel/session-manager.git
 cd session-continuity
 ./install.sh
 ```
