@@ -1,14 +1,11 @@
 # Session State — (project-name)
 
-## Active Project
-**Project:** (project-name)
-**Branch:** unknown
-**Last commit:** none
-**Last commit time:** unknown
-
 ## Current Task
 **Goal:** (none)
 **Status:** not started
+
+## From Prime
+- (none)
 
 ## What's Been Done This Session
 - (nothing yet)
@@ -22,11 +19,17 @@
 ## Open Questions / Blockers
 - (none)
 
-## Files Changed
-- (none)
+<!-- AUTO-GEN-START — managed by session-continuity cron, do not edit -->
+## Status (auto-saved)
+**Branch:** (not yet saved)
+**Last commit:** (not yet saved)
+**Last commit time:** (not yet saved)
 
-## Recent Commits
-- (none)
+### Files Changed
+- (not yet saved)
 
-## Last Updated
-(not yet saved)
+### Recent Commits
+- (not yet saved)
+
+_Auto-saved: (not yet saved)_
+<!-- AUTO-GEN-END -->

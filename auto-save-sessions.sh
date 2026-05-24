@@ -1,181 +1,237 @@
 #!/bin/bash
-# auto-save-sessions.sh — Cron job that auto-updates SESSION_STATE.md for active projects
-# Runs every 10 minutes. Only updates projects with recent git activity (last 30 min).
+# auto-save-sessions.sh — Cron job that auto-updates SESSION_STATE.md for active projects.
+#
+# Strategy: marker-bounded auto-section.
+#
+#   <!-- AUTO-GEN-START — managed by session-continuity cron, do not edit -->
+#   ... auto-generated content (branch, files changed, recent commits, timestamp) ...
+#   <!-- AUTO-GEN-END -->
+#
+# The cron ONLY writes between those markers. Every human/Claude-written section
+# (## Current Task, ## From Prime, ## What's Been Done, ## Open Questions, etc.)
+# is left completely untouched.
+#
+# On first run against a legacy SESSION_STATE.md that has no markers, the script
+# strips the legacy auto-generated sections (## Active Project, ## Files Changed,
+# ## Recent Commits, ## Last Updated) and appends a marker block at end of file.
+# Anything else in the legacy file — including sections users/Claude added like
+# ## Open PRs or ## Open Issues — is preserved verbatim.
 
-# Resolve script's own directory (works with symlinks and cron)
+set -u
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# Load config
 CONFIG_FILE="${SESSION_CONTINUITY_CONFIG:-$SCRIPT_DIR/config}"
 if [ ! -f "$CONFIG_FILE" ]; then
     echo "ERROR: Config file not found: $CONFIG_FILE"
     echo "Run ./install.sh or copy config.example to config and edit it."
     exit 1
 fi
+# shellcheck disable=SC1090
 source "$CONFIG_FILE"
 
-# Defaults for optional values
 ACTIVITY_WINDOW="${ACTIVITY_WINDOW:-30}"
 SKIP_DIRS="${SKIP_DIRS:-}"
+
+MARKER_START="<!-- AUTO-GEN-START — managed by session-continuity cron, do not edit -->"
+MARKER_END="<!-- AUTO-GEN-END -->"
 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
 }
 
+# Build the auto-gen block (markers + content) for a project's current git state.
+# Args: branch, last_commit, last_commit_time, changed_files, recent_commits
+build_block() {
+    local branch="$1" last_commit="$2" last_commit_time="$3" changed="$4" recent="$5"
+    cat <<EOF
+$MARKER_START
+## Status (auto-saved)
+**Branch:** $branch
+**Last commit:** $last_commit
+**Last commit time:** $last_commit_time
+
+### Files Changed
+$changed
+
+### Recent Commits
+$recent
+
+_Auto-saved: $(date '+%Y-%m-%d %H:%M:%S')_
+$MARKER_END
+EOF
+}
+
+# Replace the existing AUTO-GEN block in $1 with $2.
+# Atomic: writes to tmp file, validates, then renames.
+# Returns 0 on success, 1 on failure (caller logs).
+replace_block() {
+    local file="$1"
+    local block_content="$2"
+    local tmp="${file}.tmp.$$"
+    local block_tmp="${file}.block.$$"
+
+    # awk's -v can't accept multi-line strings, so write the block to a tmp file
+    # and have awk read it on first match.
+    printf '%s\n' "$block_content" > "$block_tmp"
+
+    awk -v start="$MARKER_START" -v end="$MARKER_END" -v blockfile="$block_tmp" '
+        BEGIN { inblock = 0; replaced = 0 }
+        $0 == start {
+            inblock = 1
+            while ((getline line < blockfile) > 0) print line
+            close(blockfile)
+            replaced = 1
+            next
+        }
+        $0 == end { inblock = 0; next }
+        !inblock { print }
+        END { exit (replaced ? 0 : 2) }
+    ' "$file" > "$tmp"
+    local rc=$?
+    rm -f "$block_tmp"
+
+    if [ $rc -ne 0 ] || [ ! -s "$tmp" ]; then
+        rm -f "$tmp"
+        return 1
+    fi
+
+    # Sanity: both markers must appear in the new file.
+    if ! grep -qF "$MARKER_START" "$tmp" || ! grep -qF "$MARKER_END" "$tmp"; then
+        rm -f "$tmp"
+        return 1
+    fi
+
+    mv "$tmp" "$file"
+    return 0
+}
+
+# Legacy migration: strip pre-marker auto-gen sections, then append the new
+# marker block at end of file. Preserves any user-added sections (e.g. ## Open PRs)
+# even if they were tangled up with legacy sections.
+append_block_with_migration() {
+    local file="$1"
+    local block_content="$2"
+    local tmp="${file}.tmp.$$"
+
+    # Drop the legacy auto-gen sections wherever they appear:
+    #   ## Active Project   ## Files Changed   ## Recent Commits   ## Last Updated
+    # A section is "from header line until the next ## that isn't also a legacy header."
+    awk '
+        BEGIN {
+            skip_headers["## Active Project"] = 1
+            skip_headers["## Files Changed"] = 1
+            skip_headers["## Recent Commits"] = 1
+            skip_headers["## Last Updated"] = 1
+            skip = 0
+        }
+        {
+            if ($0 in skip_headers) { skip = 1; next }
+            if (skip && $0 ~ /^## / && !($0 in skip_headers)) { skip = 0 }
+            if (!skip) print
+        }
+    ' "$file" > "$tmp"
+
+    # Trim trailing blank lines so the appended block has clean spacing.
+    awk '
+        { lines[NR] = $0 }
+        END {
+            last = NR
+            while (last > 0 && lines[last] ~ /^[[:space:]]*$/) last--
+            for (i = 1; i <= last; i++) print lines[i]
+        }
+    ' "$tmp" > "${tmp}.2" && mv "${tmp}.2" "$tmp"
+
+    # Append marker block, separated by one blank line.
+    printf '\n%s\n' "$block_content" >> "$tmp"
+
+    if [ ! -s "$tmp" ]; then
+        rm -f "$tmp"
+        return 1
+    fi
+
+    # Sanity check before swap.
+    if ! grep -qF "$MARKER_START" "$tmp" || ! grep -qF "$MARKER_END" "$tmp"; then
+        rm -f "$tmp"
+        return 1
+    fi
+
+    mv "$tmp" "$file"
+    return 0
+}
+
 for project_dir in "$PROJECTS_DIR"/*/; do
     project_name=$(basename "$project_dir")
 
-    # Skip non-project directories and inactive projects
     if echo "$SKIP_DIRS" | grep -qw "$project_name"; then
         continue
     fi
 
-    # Skip if not a git repo
     if [ ! -d "$project_dir/.git" ]; then
         continue
     fi
 
     state_file="$project_dir/SESSION_STATE.md"
-
-    # Skip if no SESSION_STATE.md
     if [ ! -f "$state_file" ]; then
         continue
     fi
 
     cd "$project_dir" || continue
 
-    # Check for recent activity: any file modified in the last ACTIVITY_WINDOW minutes
     recent_changes=$(find . -not -path './.git/*' -not -name 'SESSION_STATE.md' -newer "$state_file" -type f 2>/dev/null | head -1)
-
-    # Also check for uncommitted changes
     has_uncommitted=$(git status --porcelain 2>/dev/null | head -1)
 
-    # Skip if no recent activity and no uncommitted changes
     if [ -z "$recent_changes" ] && [ -z "$has_uncommitted" ]; then
         continue
     fi
 
     log "Updating: $project_name"
 
-    # Gather git info
     branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
     last_commit=$(git log --oneline -1 2>/dev/null || echo "no commits")
     last_commit_time=$(git log -1 --format='%ci' 2>/dev/null || echo "unknown")
 
-    # Get changed files (both staged and unstaged)
-    changed_files=""
     unstaged=$(git diff --name-only 2>/dev/null)
     staged=$(git diff --cached --name-only 2>/dev/null)
     untracked=$(git ls-files --others --exclude-standard 2>/dev/null)
 
+    changed_files=""
     if [ -n "$unstaged" ]; then
         changed_files="$changed_files
-### Modified (unstaged)
+**Modified (unstaged):**
 $(echo "$unstaged" | sed 's/^/- /')"
     fi
     if [ -n "$staged" ]; then
         changed_files="$changed_files
-### Staged
+**Staged:**
 $(echo "$staged" | sed 's/^/- /')"
     fi
     if [ -n "$untracked" ]; then
         changed_files="$changed_files
-### Untracked
+**Untracked:**
 $(echo "$untracked" | head -10 | sed 's/^/- /')"
     fi
-
     if [ -z "$changed_files" ]; then
         changed_files="- (working tree clean)"
     fi
 
-    # Get recent commits (last 5)
     recent_commits=$(git log --oneline -5 2>/dev/null | sed 's/^/- /')
 
-    # Read existing state to preserve human/Claude-written sections
-    existing_goal="(none)"
-    existing_status="not started"
-    existing_done="- (nothing yet)"
-    existing_todo="- (nothing yet)"
-    existing_decisions="- (none)"
-    existing_blockers="- (none)"
+    block=$(build_block "$branch" "$last_commit" "$last_commit_time" "$changed_files" "$recent_commits")
 
-    if [ -f "$state_file" ]; then
-        # Preserve manually written sections by extracting them
-        # Only overwrite auto-generated sections (branch, files, timestamp)
-        goal_line=$(grep '^\*\*Goal:\*\*' "$state_file" | head -1)
-        if [ -n "$goal_line" ] && ! echo "$goal_line" | grep -q '(none)'; then
-            existing_goal=$(echo "$goal_line" | sed 's/\*\*Goal:\*\* //')
+    if grep -qF "$MARKER_START" "$state_file"; then
+        if replace_block "$state_file" "$block"; then
+            log "  -> Branch: $branch | Files: $(echo "$unstaged $staged $untracked" | wc -w | tr -d ' ')"
+        else
+            log "  -> WARN: marker replace failed for $project_name (markers malformed?). Skipping."
         fi
-
-        status_line=$(grep '^\*\*Status:\*\*' "$state_file" | head -1)
-        if [ -n "$status_line" ] && ! echo "$status_line" | grep -q 'not started'; then
-            existing_status=$(echo "$status_line" | sed 's/\*\*Status:\*\* //')
-        fi
-
-        # Extract multi-line sections (macOS-compatible)
-        extract_section() {
-            local file="$1" header="$2" next_header="$3"
-            awk "/^## ${header}$/,/^## ${next_header}$/" "$file" | tail -n +2 | sed '$d' | grep -v '^$'
-        }
-
-        done_section=$(extract_section "$state_file" "What's Been Done This Session" "What's Left To Do")
-        if [ -n "$done_section" ] && ! echo "$done_section" | grep -q '(nothing yet)'; then
-            existing_done="$done_section"
-        fi
-
-        todo_section=$(extract_section "$state_file" "What's Left To Do" "Key Decisions Made")
-        if [ -n "$todo_section" ] && ! echo "$todo_section" | grep -q '(nothing yet)'; then
-            existing_todo="$todo_section"
-        fi
-
-        decisions_section=$(awk 'BEGIN{p=0} /^## Key Decisions Made$/{p=1;next} /^## Open Questions/{p=0} p' "$state_file" | grep -v '^$')
-        if [ -n "$decisions_section" ] && ! echo "$decisions_section" | grep -q '(none)'; then
-            existing_decisions="$decisions_section"
-        fi
-
-        blockers_section=$(awk 'BEGIN{p=0} /^## Open Questions/{p=1;next} /^## Files Changed$/{p=0} p' "$state_file" | grep -v '^$')
-        if [ -n "$blockers_section" ] && ! echo "$blockers_section" | grep -q '(none)'; then
-            existing_blockers="$blockers_section"
+    else
+        if append_block_with_migration "$state_file" "$block"; then
+            log "  -> Branch: $branch | MIGRATED to marker-based layout"
+        else
+            log "  -> WARN: migration failed for $project_name. Skipping."
         fi
     fi
-
-    # Write updated state
-    cat > "$state_file" << STATEEOF
-# Session State — $project_name
-
-## Active Project
-**Project:** $project_name
-**Branch:** $branch
-**Last commit:** $last_commit
-**Last commit time:** $last_commit_time
-
-## Current Task
-**Goal:** $existing_goal
-**Status:** $existing_status
-
-## What's Been Done This Session
-$existing_done
-
-## What's Left To Do
-$existing_todo
-
-## Key Decisions Made
-$existing_decisions
-
-## Open Questions / Blockers
-$existing_blockers
-
-## Files Changed
-$changed_files
-
-## Recent Commits
-$recent_commits
-
-## Last Updated
-$(date '+%Y-%m-%d %H:%M:%S') (auto-saved by cron)
-STATEEOF
-
-    log "  -> Branch: $branch | Changed files: $(echo "$unstaged $staged $untracked" | wc -w | tr -d ' ')"
 done
 
 log "Session auto-save complete."

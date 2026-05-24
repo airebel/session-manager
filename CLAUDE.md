@@ -7,9 +7,29 @@ Built because Claude sessions time out and there's no built-in session recovery.
 
 ## How It Works
 1. A cron job runs every 10 minutes, scanning all projects under the configured `PROJECTS_DIR`
-2. For any project with recent git activity, it updates that project's `SESSION_STATE.md` with branch, changed files, recent commits
+2. For any project with recent git activity, it updates the auto-generated block of that project's `SESSION_STATE.md` — branch, changed files, recent commits, timestamp
 3. During a Claude session, Claude proactively offers to save richer context (goals, decisions, what's left) to the same file
 4. To resume, you tell Claude to read the project's `CLAUDE.md` + `SESSION_STATE.md`
+
+### Marker-bounded auto-section (the safety contract)
+The cron writes ONLY between two HTML-comment markers:
+
+```
+<!-- AUTO-GEN-START — managed by session-continuity cron, do not edit -->
+... auto-generated content ...
+<!-- AUTO-GEN-END -->
+```
+
+Everything outside those markers is human/Claude content and is never touched. You can rename sections, add new sections (`## Open PRs`, `## Inbox`, etc.), or reorder freely — the cron doesn't care. The only rule: don't put content inside the marker block; it gets overwritten every 10 minutes.
+
+**Legacy migration:** the first time the cron sees an old-format `SESSION_STATE.md` (no markers), it strips the legacy `## Active Project`, `## Files Changed`, `## Recent Commits`, and `## Last Updated` sections, then appends the marker block at the end. Any other sections in the legacy file — including ones a Claude session added like `## Open PRs` — are preserved verbatim. One-shot migration; subsequent runs use the fast in-place marker swap.
+
+**Atomicity:** writes go through `*.tmp.$$` + `mv` to avoid half-written files. If the marker block is missing or malformed, the cron logs a `WARN` and skips the project rather than risk corruption.
+
+### What the cron does NOT do
+- Parse, extract, or rewrite human-written sections
+- Resolve placeholders, validate content, or "clean up"
+- Lock the file against concurrent writers — if a Claude session writes to the file at the exact moment the cron is mid-update, the later write wins on standard last-writer-wins semantics. In practice this is rare since the cron's read-to-write window is sub-second.
 
 ## Components
 
