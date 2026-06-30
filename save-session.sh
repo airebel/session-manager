@@ -37,6 +37,27 @@ if [ ! -f "$STATE_FILE" ]; then
     echo "Created new SESSION_STATE.md in $PROJECT_DIR"
 fi
 
+# Set up the per-stream notes convention: docs/notes/ committed, with a .gitkeep.
+NOTES_DIR="$PROJECT_DIR/docs/notes"
+if [ ! -d "$NOTES_DIR" ]; then
+    mkdir -p "$NOTES_DIR"
+    touch "$NOTES_DIR/.gitkeep"
+    echo "Created docs/notes/ for per-stream notes (docs/notes/<branch>.md)"
+fi
+
+# Exclude the cron-owned SESSION_STATUS.md sidecar locally (per-repo, never committed).
+GIT_DIR=$(cd "$PROJECT_DIR" && git rev-parse --git-dir 2>/dev/null)
+if [ -n "$GIT_DIR" ]; then
+    # git rev-parse may return a relative path; resolve against the project dir.
+    case "$GIT_DIR" in /*) ;; *) GIT_DIR="$PROJECT_DIR/$GIT_DIR" ;; esac
+    EXCLUDE_FILE="$GIT_DIR/info/exclude"
+    mkdir -p "$GIT_DIR/info"
+    if [ ! -f "$EXCLUDE_FILE" ] || ! grep -qxF "SESSION_STATUS.md" "$EXCLUDE_FILE" 2>/dev/null; then
+        echo "SESSION_STATUS.md" >> "$EXCLUDE_FILE"
+        echo "Excluded SESSION_STATUS.md via .git/info/exclude"
+    fi
+fi
+
 # Gather git info automatically
 cd "$PROJECT_DIR"
 BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
@@ -59,6 +80,8 @@ fi
 echo ""
 echo "SESSION_STATE.md location: $STATE_FILE"
 echo ""
-echo "TIP: Before ending your Claude session, ask Claude to"
-echo "     'update my SESSION_STATE.md with current progress'"
+echo "TIP: SESSION_STATE.md is a thin, committed index — edit it on your branch and commit."
+echo "     Keep per-stream detail in docs/notes/$BRANCH.md. Live git status auto-saves"
+echo "     to SESSION_STATUS.md (gitignored). Before ending a session, ask Claude to"
+echo "     'update my SESSION_STATE.md and branch notes with current progress'."
 echo ""

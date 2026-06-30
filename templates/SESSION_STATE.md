@@ -1,35 +1,25 @@
 # Session State — (project-name)
 
-## Current Task
-**Goal:** (none)
-**Status:** not started
+> **Durable, committed index — safe for concurrent sessions.**
+> Keep this thin. Per-stream working detail goes in `docs/notes/<branch>.md`.
+> Live git status (branch / changed files / commits) is auto-saved to `SESSION_STATUS.md` (gitignored) — don't edit that.
+>
+> **Rule:** edit this file on YOUR branch and **commit** it. Never leave long-lived uncommitted edits —
+> that's what strands context in one working tree and clobbers other sessions. Distinct rows/sections
+> merge cleanly; genuine overlaps become normal git conflicts you resolve.
+
+## Current Focus
+(one line: the main thread right now)
+
+## Active Workstreams
+One row per concurrent branch. Each session owns its own row.
+
+| Branch | Notes file | Owner | Status |
+|--------|------------|-------|--------|
+| main   | —          | —     | —      |
 
 ## From Prime
 - (none)
 
-## What's Been Done This Session
-- (nothing yet)
-
-## What's Left To Do
-- (nothing yet)
-
-## Key Decisions Made
+## Key Decisions / Pointers
 - (none)
-
-## Open Questions / Blockers
-- (none)
-
-<!-- AUTO-GEN-START — managed by session-continuity cron, do not edit -->
-## Status (auto-saved)
-**Branch:** (not yet saved)
-**Last commit:** (not yet saved)
-**Last commit time:** (not yet saved)
-
-### Files Changed
-- (not yet saved)
-
-### Recent Commits
-- (not yet saved)
-
-_Auto-saved: (not yet saved)_
-<!-- AUTO-GEN-END -->

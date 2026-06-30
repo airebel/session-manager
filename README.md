@@ -8,11 +8,22 @@ Claude sessions time out. When you start a new conversation, Claude has no memor
 
 ## The Solution
 
-A lightweight cron job snapshots your git project state every 10 minutes into a `SESSION_STATE.md` file. When resuming, you tell Claude to read that file and it picks up with full context.
+A three-file model that's safe even when multiple sessions work the same repo at once:
 
-**What gets tracked automatically:** branch, changed files, recent commits, last commit info.
+- **`SESSION_STATE.md`** — a thin, durable, committed index (current focus, active workstreams, decisions).
+  Edited on a branch and committed.
+- **`docs/notes/<branch>.md`** — per-stream working detail, committed on each branch (filename = branch, so
+  concurrent streams never collide).
+- **`SESSION_STATUS.md`** — live git state (branch, changed files, recent commits) auto-saved by a cron every
+  10 minutes. Gitignored and cron-owned.
 
-**What Claude adds when you say "save session":** current goal, what's done, what's left, key decisions, blockers.
+When resuming, you tell Claude to read `SESSION_STATE.md` (+ the branch notes and `SESSION_STATUS.md`) and it
+picks up with full context.
+
+**What gets tracked automatically (`SESSION_STATUS.md`):** branch, changed files, recent commits, last commit info.
+
+**What Claude adds when you say "save session" (committed on your branch):** current goal, what's done, what's
+left, key decisions, blockers — in `docs/notes/<branch>.md`, with the `SESSION_STATE.md` index kept current.
 
 ## Requirements
 
@@ -51,15 +62,18 @@ Claude will read your saved state and continue where you left off.
 ## How It Works
 
 ```
-┌─────────────────┐     every 10 min      ┌─────────────────────┐
-│  Your Projects   │ ◄──── cron job ─────► │  SESSION_STATE.md   │
-│  (git repos)     │     reads git state   │  (in each project)  │
-└─────────────────┘                        └─────────────────────┘
+┌─────────────────┐    every 10 min     ┌─────────────────────────┐
+│  Your Projects   │ ─── cron job ─────► │  SESSION_STATUS.md       │
+│  (git repos)     │    reads git state  │  (gitignored, cron-owned)│
+└─────────────────┘                      └─────────────────────────┘
+
+   sessions edit on their branch + commit:
+   SESSION_STATE.md (thin committed index)  +  docs/notes/<branch>.md (per-stream)
                                                      │
                                                      ▼
                                            ┌─────────────────────┐
                                            │  New Claude Session  │
-                                           │  reads state file    │
+                                           │  reads state files   │
                                            │  and resumes work    │
                                            └─────────────────────┘
 ```
@@ -69,11 +83,12 @@ Claude will read your saved state and continue where you left off.
 ```
 session-continuity/
 ├── install.sh              # Interactive setup
-├── auto-save-sessions.sh   # Cron script (scans projects, updates state)
-├── save-session.sh         # Manual snapshot for a single project
+├── auto-save-sessions.sh   # Cron script (writes each project's SESSION_STATUS.md sidecar)
+├── save-session.sh         # Init/snapshot for a single project
 ├── config.example          # Template config (copy to 'config')
 ├── templates/
-│   ├── SESSION_STATE.md    # Template for new projects
+│   ├── SESSION_STATE.md    # Thin-index template for new projects
+│   ├── notes.md            # Per-stream notes template (docs/notes/<branch>.md)
 │   └── CLAUDE_MD_SNIPPET.md # Paste this into your project's CLAUDE.md
 ├── RESUME_PROMPT.md        # Resume instructions
 └── README.md
