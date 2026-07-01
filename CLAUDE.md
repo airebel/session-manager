@@ -1,5 +1,12 @@
 # Session Continuity System
 
+> **⚠️ CRON RETIRED 2026-07-01.** The 10-minute auto-save job is off (script no-ops; crontab entry
+> removed). It rewrote a gitignored `SESSION_STATUS.md` in every repo with uncommitted files each tick,
+> churning folder mtimes across the Mac mini for no durable gain — that file was only a regenerable cache
+> of `git status`/`git log`. **What remains (still recommended):** the committed `SESSION_STATE.md` thin
+> index + `docs/notes/<branch>.md` per-stream notes, edited-on-branch-and-committed. For live git state,
+> just run `git status` / `git log` at resume time. Sections below describing the cron are historical.
+
 ## What This Is
 A session persistence system for Claude coding sessions. Automatically tracks project state and provides quick-resume prompts so interrupted sessions can be picked up in seconds across any device.
 

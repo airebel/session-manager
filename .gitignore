@@ -1,2 +1,4 @@
 config
 session-autosave.log
+crontab-session-removed.txt
+session-continuity-crontab.backup.*.txt

@@ -1,5 +1,9 @@
 # Session Continuity for Claude
 
+> **⚠️ The auto-save cron was retired 2026-07-01.** What remains is the committed `SESSION_STATE.md`
+> index + `docs/notes/<branch>.md` notes (edited on a branch and committed); live git state is read on
+> demand with `git status`/`git log`. The cron-based flow described below is historical.
+
 Automatic session state tracking for Claude coding sessions. Picks up where you left off after session timeouts, across devices.
 
 ## The Problem

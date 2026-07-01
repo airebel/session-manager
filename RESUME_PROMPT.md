@@ -8,8 +8,8 @@ Paste this into a new Claude conversation, replacing `[project-path]` with the f
 Read [project-path]/CLAUDE.md and [project-path]/SESSION_STATE.md and pick up where I left off.
 ```
 
-(Also point Claude at your branch's `docs/notes/<branch>.md` and `SESSION_STATUS.md` for the latest
-working detail and live git state.)
+(Also point Claude at your branch's `docs/notes/<branch>.md` for the latest working detail, and have it
+run `git status` / `git log` for live git state.)
 
 ## During a session
 
@@ -18,12 +18,14 @@ working detail and live git state.)
   `SESSION_STATE.md` index, **committed on your branch**
 - Before stepping away, say **"save session"** so the next conversation has full context
 
-## What gets saved automatically vs. manually
+## Where state lives
 
-| Saved by cron → `SESSION_STATUS.md` (gitignored, every 10 min) | Saved when you say "save session" → branch notes + index (committed) |
+| Read live from git (on demand) | Saved when you say "save session" → branch notes + index (committed) |
 |------------------------------|-----------------------------------|
-| Branch name                  | Current goal / task               |
-| Changed files                | What's been done                  |
-| Recent commits               | What's left to do                 |
+| Branch name (`git branch`)   | Current goal / task               |
+| Changed files (`git status`) | What's been done                  |
+| Recent commits (`git log`)   | What's left to do                 |
 | Last commit info             | Key decisions made                |
 |                              | Blockers / open questions         |
+
+_(The old 10-min auto-save cron that cached git state in `SESSION_STATUS.md` was retired 2026-07-01.)_

@@ -22,6 +22,17 @@
 # a live main checkout) those edits were stranded in one tree and raced the cron and
 # other sessions. Moving live status to a gitignored sidecar removes the cron as a
 # writer to any shared/committed file, which dissolves the contention entirely.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# RETIRED 2026-07-01 (Chris): the 10-minute auto-save is turned off. It rewrote a
+# SESSION_STATUS.md in every repo with uncommitted files each tick, bumping folder
+# mtimes across the Mac mini — pure noise, since SESSION_STATUS.md is only a
+# regenerable cache of `git status` / `git log`. Live git state is now read on
+# demand at resume time instead. The crontab entry is being removed; this guard
+# makes any lingering tick a no-op. To re-enable, delete the two lines below.
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] session auto-save is RETIRED (2026-07-01) — no-op, exiting."
+exit 0
+# ─────────────────────────────────────────────────────────────────────────────
 
 set -u
 
