@@ -1,2 +1,6 @@
 config
 session-autosave.log
+# secrets and local state (added 2026-10-03)
+.env
+.env.*
+!.env.example
